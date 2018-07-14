@@ -5,9 +5,9 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
@@ -20,7 +20,7 @@ import javax.imageio.ImageIO;
 public class Sample1 {
 
     private static final String CAPTCHA_URL = "http://vote.sun0769.com/include/captcha.asp";
-    private static final String BASE_IMAGE_PATH = "D:\\Workspaces\\eclipse-workspace\\captchaRecog\\img\\";
+    private static final String BASE_IMAGE_PATH = System.getProperty("user.dir") + "\\img\\";
 
     /**
      * 下载验证码
@@ -163,13 +163,14 @@ public class Sample1 {
 
     private void splitImage() throws IOException {
         for (int i = 0; i < 10; i++) {
-            File file = new File(BASE_IMAGE_PATH + i + ".png");
+            File file = new File(BASE_IMAGE_PATH + "\\corrosion\\" + i + ".png");
             BufferedImage bi = ImageIO.read(file);
             int h = bi.getHeight();
             int numWidth = 13;
             for(int j = 0; j < 6; j++) {
                 int startX = 26 + j * numWidth;
                 BufferedImage img = bi.getSubimage(startX, 0, numWidth, h);
+                img = getMaxConnectedRegion(img);
                 File splitFile = new File(BASE_IMAGE_PATH + "\\split\\" + i + "\\" + j + ".png");
                 if (!splitFile.exists()) {
                     splitFile.getParentFile().mkdirs();
@@ -180,7 +181,7 @@ public class Sample1 {
         }
     }
 
-    public boolean isWhite(int colorInt) {  
+    private boolean isWhite(int colorInt) {  
         Color color = new Color(colorInt);
         int r = color.getRed();
         int g = color.getGreen();
@@ -188,15 +189,127 @@ public class Sample1 {
         return r > 230 && g > 230 && b > 230;  
     }
 
-    public boolean isBlack(int colorInt) {
+    private boolean isBlack(int colorInt) {
         return !isWhite(colorInt);
+    }
+
+    private int[][] toArrayData(BufferedImage img) {
+        int w = img.getWidth();
+        int h = img.getHeight();
+        int[][] imgData = new int[w][h];
+        for (int x = 0; x < w; x++) {
+            for (int y = 0; y < h; y++) {
+                imgData[x][y] = img.getRGB(x, y);
+            }
+        }
+        return imgData;
+    }
+
+    /**
+     * 获取一副图片中最大的连通区域，并裁剪出该区域
+     */
+    private BufferedImage getMaxConnectedRegion(BufferedImage bi) {
+        int w = bi.getWidth();
+        int h = bi.getHeight();
+        Set<int[]> visted = new HashSet<>(); //保存已经访问过的黑点
+        Set<int[]> maxRegion = new HashSet<>();
+
+        for (int x = 0; x < w; x++) {
+            for (int y = 0; y < h; y++) {
+                if (!contains(visted, new int[] {x, y}) && isBlack(bi.getRGB(x, y))) { //找到连通区域的起点
+                    Set<int[]> region = new HashSet<>();
+                    getConnectedRegion(bi, x, y, region);
+                    visted.addAll(region);
+                    if (region.size() > maxRegion.size()) {
+                        maxRegion = region;
+                    }
+                }
+            }
+        }
+        int minX = w, minY = h, maxX = 0, maxY = 0;
+        for (int[] region : maxRegion) {
+            int x = region[0], y = region[1];
+            if (minX > x) {
+                minX = x;
+            }
+            if (minY > y) {
+                minY = y;
+            }
+            if (maxX < x) {
+                maxX = x;
+            }
+            if (maxY < y) {
+                maxY = y;
+            }
+        }
+        return bi.getSubimage(minX, minY, maxX - minX + 1, maxY - minY + 1);
+    }
+
+    /**
+     * 找到从点(x, y)出发的连通区域, 当该点周围没有黑点时返回
+     * @param bi
+     * @param x
+     * @param y
+     * @param region 保存连通区域中已经访问过的点
+     */
+    private void getConnectedRegion(BufferedImage bi, int x, int y, Set<int[]> region) {
+        int w = bi.getWidth();
+        int h = bi.getHeight();
+        int[][] aroundPoints = {{x, y-1}, {x+1, y-1}, {x+1, y}, {x+1, y+1}, {x, y+1}, {x-1, y+1}, {x-1, y}, {x-1, y-1}};
+        for(int i = 0; i < aroundPoints.length; i++) {
+            int[] point = aroundPoints[i];
+            int x1 = point[0];
+            int y1 = point[1];
+            if (x1 > 0 && x1 < w && y1 > 0 && y1 < h && !contains(region, point) && isBlack(bi.getRGB(x1, y1))) {
+                region.add(point);
+                getConnectedRegion(bi, x1, y1, region);
+            }
+        }
+    }
+
+    private boolean contains(Set<int[]> set, int[] point) {
+        set = set.stream().filter(p -> p[0] == point[0] && p[1] == point[1]).collect(Collectors.toSet());
+        return !set.isEmpty();
+    }
+
+    /**
+     * 识别验证码
+     * @param img
+     * @throws IOException 
+     */
+    public void recognise(BufferedImage img) throws IOException {
+        File splitFolder = new File(BASE_IMAGE_PATH + "\\split");
+        File[] files = splitFolder.listFiles();
+
+        for (int i = 0; i < files.length; i++) {
+            File file = files[i];
+            File[] childs = file.listFiles();
+            StringBuffer captcha = new StringBuffer();
+            for (int j = 0; j < childs.length; j++) {
+                BufferedImage bi = ImageIO.read(childs[j]);
+                captcha.append(recogniseBaseSample(bi));
+            }
+
+            System.out.println("============================");
+            System.out.println("识别出验证码： " + captcha.toString());
+            System.out.println("============================");
+        }
+    }
+
+    /**
+     * 根据模板进行识别
+     * @param bi
+     * @return
+     */
+    private String recogniseBaseSample(BufferedImage bi) {
+        return null;
     }
 
     public static void main(String[] args) throws IOException {
         Sample1 sam = new Sample1();
 //        sam.downloadCaptcha();
 //        sam.binaryzation();
-        sam.removeDisturbLine();
-//        sam.splitImage();
+//        sam.removeDisturbLine();
+        sam.splitImage();
     }
 }
