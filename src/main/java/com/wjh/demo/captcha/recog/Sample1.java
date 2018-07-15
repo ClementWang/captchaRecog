@@ -5,7 +5,10 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -274,10 +277,9 @@ public class Sample1 {
 
     /**
      * 识别验证码
-     * @param img
      * @throws IOException 
      */
-    public void recognise(BufferedImage img) throws IOException {
+    public void recognise() throws IOException {
         File splitFolder = new File(BASE_IMAGE_PATH + "\\split");
         File[] files = splitFolder.listFiles();
 
@@ -290,7 +292,6 @@ public class Sample1 {
                 captcha.append(recogniseBaseSample(bi));
             }
 
-            System.out.println("============================");
             System.out.println("识别出验证码： " + captcha.toString());
             System.out.println("============================");
         }
@@ -298,18 +299,95 @@ public class Sample1 {
 
     /**
      * 根据模板进行识别
+     * 
      * @param bi
      * @return
+     * @throws IOException
      */
-    private String recogniseBaseSample(BufferedImage bi) {
-        return null;
+    private String recogniseBaseSample(BufferedImage bi) throws IOException {
+        File file = new File(BASE_IMAGE_PATH + "\\sample\\");
+        File[] samples = file.listFiles();
+        Map<Double, File> similarMap = new HashMap<>();
+        for (int i = 0; i < samples.length; i++) {
+            BufferedImage sample = ImageIO.read(samples[i]);
+            Double degree = getSimilarityDegree(bi, sample);
+            similarMap.put(degree, samples[i]);
+        }
+        Optional<Double> max = similarMap.keySet().stream().max(Double::compare);
+        File similarImg = similarMap.get(max.get());
+        String name = similarImg.getName();
+        // System.out.println(name + " ---相似度---> " + max.get());
+        return name.substring(0, name.lastIndexOf("."));
+    }
+
+    /**
+     * 获取两个图片的相似度
+     * 
+     * @param bi
+     * @param sample
+     * @return
+     */
+    private double getSimilarityDegree(BufferedImage bi, BufferedImage sample) {
+        int w = bi.getWidth(), h = bi.getHeight();
+        int w0 = sample.getWidth(), h0 = sample.getHeight();
+        int samePoint = getSamePointCount(bi, 0, 0, sample);
+        double degreeSample = samePoint / (w0 * h0 * 1d);
+        double degreeSource = samePoint / (w * h * 1d);
+        return degreeSample * degreeSource;
+    }
+
+    private int getSamePointCount(BufferedImage img1, int startX, int startY, BufferedImage img2) {
+        int w1 = img1.getWidth(), h1 = img1.getHeight();
+        int w2 = img2.getWidth(), h2 = img2.getHeight();
+        // 裁剪为相同大小的图片
+        int minW = w1 < w2 ? w1 : w2;
+        int minH = h1 < h2 ? h1 : h2;
+        BufferedImage img11, img22;
+        if (w1 <= w2 && h1 >= h2) {
+            img11 = img1.getSubimage(0, startY, minW, minH);
+            img22 = img2.getSubimage(startX, 0, minW, minH);
+        } else if (w1 > w2 && h1 < h2) {
+            img11 = img1.getSubimage(startX, 0, minW, minH);
+            img22 = img2.getSubimage(0, startY, minW, minH);
+        } else if (w1 > w2) {
+            img11 = img1.getSubimage(startX, startY, minW, minH);
+            img22 = img2.getSubimage(0, 0, minW, minH);
+        } else {
+            img11 = img1.getSubimage(0, 0, minW, minH);
+            img22 = img2.getSubimage(startX, startY, minW, minH);
+        }
+        // 求相同大小图片中相同点的个数
+        int maxSamePoint = 0;
+        for (int x = 0; x < minW; x++) {
+            for (int y = 0; y < minH; y++) {
+                if (isBlack(img11.getRGB(x, y)) && isBlack(img22.getRGB(x, y))) {
+                    maxSamePoint++;
+                }
+            }
+        }
+        int maxW = w1 > w2 ? w1 : w2;
+        int maxH = h1 > h2 ? h1 : h2;
+        if (startX + minW < maxW || startY + minH < maxH) {
+            if (startX + minW < maxW) {
+                startX++;
+            } else if (startY + minH < maxH) {
+                startY++;
+                startX = 0;
+            }
+            int samePoint = getSamePointCount(img1, startX, startY, img2);
+            if (samePoint > maxSamePoint) {
+                maxSamePoint = samePoint;
+            }
+        }
+        return maxSamePoint;
     }
 
     public static void main(String[] args) throws IOException {
         Sample1 sam = new Sample1();
-//        sam.downloadCaptcha();
-//        sam.binaryzation();
-//        sam.removeDisturbLine();
+        sam.downloadCaptcha();
+        sam.binaryzation();
+        sam.removeDisturbLine();
         sam.splitImage();
+        sam.recognise();
     }
 }
