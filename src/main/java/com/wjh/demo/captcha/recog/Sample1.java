@@ -35,8 +35,8 @@ public class Sample1 {
             File file = new File(BASE_IMAGE_PATH + i + ".png");
             if (!file.exists()) {
                 file.getParentFile().mkdirs();
+                file.createNewFile();
             }
-            file.createNewFile();
             ImageIO.write(bi, "png", file);
         }
     }
@@ -85,8 +85,8 @@ public class Sample1 {
             File binaryFile = new File(BASE_IMAGE_PATH + "\\binary\\" + index + ".png");
             if (!binaryFile.exists()) {
                 binaryFile.getParentFile().mkdirs();
+                binaryFile.createNewFile();
             }
-            binaryFile.createNewFile();
             ImageIO.write(bi, "png", binaryFile);
         }
     }
@@ -158,8 +158,8 @@ public class Sample1 {
             File corrosionFile = new File(BASE_IMAGE_PATH + "\\corrosion\\" + index + ".png");
             if (!corrosionFile.exists()) {
                 corrosionFile.getParentFile().mkdirs();
+                corrosionFile.createNewFile();
             }
-            corrosionFile.createNewFile();
             ImageIO.write(bi, "png", corrosionFile);
         }
     }
@@ -177,8 +177,8 @@ public class Sample1 {
                 File splitFile = new File(BASE_IMAGE_PATH + "\\split\\" + i + "\\" + j + ".png");
                 if (!splitFile.exists()) {
                     splitFile.getParentFile().mkdirs();
+                    splitFile.createNewFile();
                 }
-                splitFile.createNewFile();
                 ImageIO.write(img, "png", splitFile);
             }
         }
